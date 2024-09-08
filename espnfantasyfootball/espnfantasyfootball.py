@@ -1,12 +1,15 @@
 import requests
 import pandas as pd
+import logging
+
+logging.basicConfig()
 
 
 class FantasyLeague:
     '''
     ESPN Fantasy Football League class for pulling data from the ESPN API
     '''
-    BASE_URL = "https://fantasy.espn.com/apis/v3/games/ffl/seasons/{year}/segments/0/leagues/{league_id}"
+    BASE_URL = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/{year}/segments/0/leagues/{league_id}"
     POSITION_MAPPING = {
         0: 'QB',
         4: 'WR',
@@ -25,7 +28,7 @@ class FantasyLeague:
         self.year = year
         self.espn_s2 = espn_s2
         self.swid = swid
-        self.base_url = f"https://fantasy.espn.com/apis/v3/games/ffl/seasons/{self.year}/segments/0/leagues/{self.league_id}"
+        self.base_url = f"https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/{self.year}/segments/0/leagues/{self.league_id}"
         self.cookies = {
             "swid": self.swid,
             "espn_s2": self.espn_s2
@@ -133,6 +136,12 @@ class FantasyLeague:
                                               "matchupPeriodId": week},
                                       view="mTeam")
 
+        if team_json:
+            logging.debug("Team JSON: %s", team_json)
+        else:
+            logging.warning("Received empty team_json")
+
+
         # Initialize empty list for team names and team ids
         team_id = []
         team_primary_owner = []
@@ -147,17 +156,19 @@ class FantasyLeague:
             # Append the team id and team name to the list
             team_id.append(team_json['teams'][team]['id'])
             team_primary_owner.append(team_json['teams'][team]['primaryOwner'])
-            team_location.append(team_json['teams'][team]['location'])
-            team_nickname.append(team_json['teams'][team]['nickname'])
+            # team_location.append(team_json['teams'][team]['location'])
+            team_nickname.append(team_json['teams'][team]['name'])
             owner_first_name.append(team_json['members'][team]['firstName'])
             owner_last_name.append(team_json['members'][team]['lastName'])
             team_cookie.append(team_json['members'][team]['id'])
+
+    
 
         # Create team DataFrame
         team_df = pd.DataFrame({
             'PlayerFantasyTeam': team_id,
             'TeamPrimaryOwner': team_primary_owner,
-            'Location': team_location,
+            'Location': 'location holder',
             'Nickname': team_nickname,
         })
 
@@ -176,7 +187,7 @@ class FantasyLeague:
                         'Nickname', 'OwnerFirstName', 'OwnerLastName']]
 
         # Concatenate the two name columns
-        team_df['TeamName'] = team_df['Location'] + ' ' + team_df['Nickname']
+        team_df['TeamName'] = team_df['Nickname']
 
         # Create a column for full name
         team_df['FullName'] = team_df['OwnerFirstName'] + \
@@ -187,6 +198,8 @@ class FantasyLeague:
 
         self.df = self.df.merge(team_df, on=['PlayerFantasyTeam'], how='left')
         self.df = self.df.rename(columns={'Name': 'PlayerFantasyTeamName'})
+
+        
 
     def get_league_data(self, week=None):
         '''
@@ -245,6 +258,9 @@ class FantasyLeague:
             matchup_df = pd.json_normalize(matchup_json['schedule'])
             team_df = pd.json_normalize(team_json['teams'])
 
+
+            # team_id_to_name = {team['id']: team['name'] for team in team_json['teams']}
+
             # Define the column names needed
             matchup_column_names = {
                 'matchupPeriodId': 'Week',
@@ -256,25 +272,37 @@ class FantasyLeague:
 
             team_column_names = {
                 'id': 'id',
-                'location': 'Name1',
-                'nickname': 'Name2'
+                'team.name': 'Name1',
+                'team.name': 'Name2'
             }
+
+            print("here1")
+
 
            # Reindex based on column names defined above
             matchup_df = matchup_df.reindex(columns=matchup_column_names).rename(
                 columns=matchup_column_names)
             team_df = team_df.reindex(columns=team_column_names).rename(
                 columns=team_column_names)
+            
+            print("here2")
 
             # Add a new column for regular/playoff game based on week number
             matchup_df['Type'] = ['Regular' if week <=
                                   13 else 'Playoff' for week in matchup_df['Week']]
 
             # Concatenate the two name columns
-            team_df['Name'] = team_df['Name1'] + ' ' + team_df['Name2']
+            team_df['Name'] = team_df.get('Name1')
+
+            print(team_df)
+
+            print("here3")
 
             # Drop all columns except id and Name
             team_df = team_df.filter(['id', 'Name'])
+            print(team_df)
+
+            print("here4")
 
             # (1) Rename Team1 column to id
             matchup_df = matchup_df.rename(columns={"Team1": "id"})
@@ -282,6 +310,9 @@ class FantasyLeague:
             # (1) Merge DataFrames to get team names instead of ids and rename Name column to Name1
             matchup_df = matchup_df.merge(team_df, on=['id'], how='left')
             matchup_df = matchup_df.rename(columns={'Name': 'Name1'})
+
+            print("here5")
+
 
             # (1) Drop the id column and reorder columns
             matchup_df = matchup_df[['Week', 'Name1',
