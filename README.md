@@ -1,3 +1,7 @@
+# Fixed Version
+This code is a fixed version of https://github.com/tbryan2/espnfantasyfootball. Since this repo was last updated, the API call has changed.
+This change in API call has caused other errors with field names that no longer exist or have changed also.
+
 # espnfantasyfootball
 `pip install espnfantasyfootball`
 
